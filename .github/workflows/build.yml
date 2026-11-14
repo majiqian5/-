@@ -12,7 +12,7 @@ jobs:
         run: |
           set -e
           mkdir -p out
-          curl -fsSL -o AxsLevel.m    "https://aka.doubaocdn.com/s/WeST7BxOj4"
+          curl -fsSL -o AxsLevel.m    "https://aka.doubaocdn.com/s/31HdnewCl8"
           curl -fsSL -o axs_lv.c      "https://aka.doubaocdn.com/s/UA9ZZeGhAP"
           curl -fsSL -o axs_load.lua  "https://aka.doubaocdn.com/s/7F2eT7K47k"
           curl -fsSL -o ent.plist     "https://aka.doubaocdn.com/s/U5ysv6B7Kv"
@@ -57,3 +57,5 @@ jobs:
             out/axs_lv
             axs_load.lua
             ent.plist
+
+        
