@@ -1,4 +1,3 @@
-            
 //
 //  AxsLevel.m — mediaserverd 内真实音频电平载荷
 //  编译：arm64e（必须用 Xcode 的 Apple clang，Linux 工具链无法生成 PAC 代码）
@@ -243,5 +242,3 @@ __attribute__((visibility("default"))) int axs_start(void) {
 }
 
 __attribute__((visibility("default"))) int axs_stop(void) { gHookOK = 0; return 0; }
-
-        
