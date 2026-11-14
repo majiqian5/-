@@ -44,6 +44,8 @@ static volatile int gFmtBits = 0;
 static volatile int gFmtFloat = 0;
 static volatile int gFmtCh = 1;
 static volatile int gFmtReady = 0;
+static volatile double gDbLo = -40.0;   // 量程底（对应 0）
+static volatile double gDbHi = -2.0;    // 量程顶（对应 100）
 static volatile double gSampleRate = 44100.0;
 
 __attribute__((visibility("default"))) int axs_fmt(void) {
@@ -78,7 +80,7 @@ static inline double bq_run(Biquad *q, double x) {
     return y;
 }
 
-// 归一化 float 单声道 → 10 段电平（-70..-6 dB → 0..100）
+// 归一化 float 单声道 → 10 段电平（-40..-2 dB → 0..100）
 static void feed(float *p, int n) {
     if (n <= 0) return;
     double acc[AXS_BANDS];
@@ -94,7 +96,7 @@ static void feed(float *p, int n) {
     for (int i = 0; i < AXS_BANDS; i++) {
         double e  = sqrt(acc[i] / (double)n);
         double db = 20.0 * log10(e + 1e-9);
-        double v  = (db + 70.0) / 64.0 * 100.0;
+        double v  = (db - gDbLo) / (gDbHi - gDbLo) * 100.0;
         if (v < 0) v = 0; if (v > 100) v = 100;
         gBand[i] = (v > gBand[i]) ? (gBand[i]*0.45 + v*0.55) : (gBand[i]*0.82 + v*0.18);
     }
@@ -195,6 +197,16 @@ static void *srv_thread(void *arg) {
         for (int i = 0; i < 4; i++) {
             if (clients[i] < 0) continue;
             if (send(clients[i], line, n, MSG_NOSIGNAL) <= 0) { close(clients[i]); clients[i] = -1; }
+        }
+
+        static int tick = 0;
+        if ((tick++ % 30) == 0) {
+            FILE *rf = fopen(AXS_TMP "/range.txt", "r");
+            if (rf) {
+                double lo, hi;
+                if (fscanf(rf, "%lf %lf", &lo, &hi) == 2 && hi > lo + 5) { gDbLo = lo; gDbHi = hi; }
+                fclose(rf);
+            }
         }
 
         FILE *f = fopen(AXS_LEVELS ".tmp", "w");
