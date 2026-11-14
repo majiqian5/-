@@ -1,0 +1,92 @@
+name: build
+
+# 手动点 + push 都触发
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    # macos-14 / macos-15 都是 Apple Silicon runner，自带完整 Xcode（含 iphoneos SDK）
+    # 交叉编 arm64e 不需要设备，clang 有 SDK 就行
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- 工具链
+      - name: 确认 Xcode 与 Apple clang
+        run: |
+          set -euo pipefail
+
+          # runner 默认已选 stable Xcode，这里只是尽量挑最高版本，失败就保持默认
+          XO=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "${XO:-}" ] && [ -d "$XO/Contents/Developer" ]; then
+            sudo xcode-select -s "$XO/Contents/Developer" || true
+            echo "xcode-select -> $XO"
+          fi
+
+          echo "--- 版本 ---"
+          xcodebuild -version
+          echo "--- iOS SDK ---"
+          xcrun --sdk iphoneos --show-sdk-path
+          echo "--- clang ---"
+          xcrun --sdk iphoneos --find clang
+          xcrun --sdk iphoneos --find clang --version | head -2
+
+      # ---------------------------------------------------------------- ldid
+      # dlopen 只认 ldid 的签名（带 platform-application），codesign 假签名会被 AMFI 拒
+      - name: 安装 ldid
+        run: |
+          set -euo pipefail
+          export PATH="/usr/local/bin:$PATH"
+
+          # 先按 GitHub release 资产名自动挑匹配当前架构的二进制
+          ASSET=$(curl -fsSL https://api.github.com/repos/ProcursusTeam/ldid/releases/latest \
+            | python3 -c "import json,sys,os;a=json.load(sys.stdin).get('assets',[]);m='arm64' if os.uname().machine=='arm64' else 'x86_64';c=[x['browser_download_url'] for x in a if 'macosx' in x['name'] and m in x['name']];print(c[0] if c else '')" || true)
+
+          if [ -n "${ASSET:-}" ] && curl -fsSL -o /tmp/ldid "$ASSET"; then
+            chmod +x /tmp/ldid
+            sudo mv /tmp/ldid /usr/local/bin/ldid
+            echo "ldid 来自: $ASSET"
+          else
+            echo "release 拿不到，改为源码编译 ldid"
+            git clone --depth 1 https://github.com/ProcursusTeam/ldid /tmp/ldid-src
+            make -C /tmp/ldid-src -j4
+            sudo cp /tmp/ldid-src/ldid /usr/local/bin/ldid
+            sudo chmod +x /usr/local/bin/ldid
+          fi
+
+          which ldid
+          ldid -h 2>&1 | head -3 || true
+
+      # ---------------------------------------------------------------- 编译
+      - name: 编译 + 产物自证
+        run: |
+          set -euo pipefail
+          chmod +x build_xcode.sh verify.sh
+          ./build_xcode.sh 2>&1 | tee build.log
+
+      # ---------------------------------------------------------------- 产物
+      - name: 上传 dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: AxsEQ-dylib
+          path: |
+            out/AxsLevel.dylib
+            out/axs_lv
+            axs_load.lua
+            build.log
+          if-no-files-found: error
+          retention-days: 30
+
+      # 失败时把日志也留下，不然只能靠 Actions 网页翻
+      - name: 失败留日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AxsEQ-build-log
+          path: build.log
+          if-no-files-found: warn
