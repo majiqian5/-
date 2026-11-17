@@ -18,19 +18,23 @@ jobs:
           set -e
           brew install ldid xz || true
 
-          # Theos 本体
+          # Theos 本体（自带一个空的 sdks 目录）
           git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
 
-          # 关键：SDK 用 git sparse checkout 拉，不能用 zip（zip 会丢 framework 的符号链接）
-          git clone --depth 1 --filter=blob:none --no-checkout https://github.com/theos/sdks.git "$HOME/theos/sdks"
-          cd "$HOME/theos/sdks"
+          # SDK 只能在临时目录里 clone 再整体搬过去：既避开已存在的 sdks 目录，也用 git 保住 framework 的符号链接
+          git clone --depth 1 --filter=blob:none --no-checkout https://github.com/theos/sdks.git /tmp/sdks
+          cd /tmp/sdks
           git sparse-checkout init --cone
           git sparse-checkout set iPhoneOS16.5.sdk
           git checkout
+          cd "$HOME"
+          rm -rf "$HOME/theos/sdks"
+          mv /tmp/sdks "$HOME/theos/sdks"
 
           echo "已安装 SDK:"
           ls -1 "$HOME/theos/sdks"
           test -d "$HOME/theos/sdks/iPhoneOS16.5.sdk/System/Library/Frameworks/UIKit.framework"
+          test -f "$HOME/theos/sdks/iPhoneOS16.5.sdk/System/Library/Frameworks/UIKit.framework/UIKit"
 
       - name: Build rootless
         run: |
