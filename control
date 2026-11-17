@@ -1,0 +1,9 @@
+Package: com.you.islandhls
+Name: Island HLS
+Version: 0.2.1
+Architecture: iphoneos-arm64
+Description: 在灵动岛内播放 m3u8 / HLS 直播源（arm64+arm64e，断流自愈）
+Maintainer: you
+Author: you
+Section: Tweaks
+Depends: mobilesubstrate
