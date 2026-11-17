@@ -1,3 +1,4 @@
+            
 name: build
 
 on:
@@ -6,27 +7,41 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # macos-14 已于 2026-11-02 下线，必须用 macos-15（Apple Silicon + Xcode 16）
+    runs-on: macos-15
+    timeout-minutes: 30
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Theos
         run: |
+          set -e
           brew install ldid xz || true
           git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
           curl -sL https://github.com/theos/sdks/archive/refs/heads/master.zip -o sdks.zip
-          unzip -q sdks.zip
+          unzip -q -o sdks.zip
           mkdir -p "$HOME/theos/sdks"
-          cp -r sdks-master/*.sdk "$HOME/theos/sdks/" 2>/dev/null || true
-          ls "$HOME/theos/sdks"
+          cp -r sdks-master/*.sdk "$HOME/theos/sdks/"
+          echo "可用 SDK:"
+          ls -1 "$HOME/theos/sdks"
 
       - name: Build rootless
         run: |
+          set -e
           export THEOS="$HOME/theos"
           make clean || true
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1
+          echo "产物:"
           ls -l packages/
+
+      - name: Verify arm64e ABI
+        run: |
+          set -e
+          DYLIB=.theos/obj/arm64e/IslandHLS.dylib
+          file "$DYLIB"
+          python3 -c "import struct;d=open('$DYLIB','rb').read();print('cpusubtype=%#x (期望 0x80000002)' % struct.unpack('<I',d[8:12])[0])"
 
       - name: Upload deb
         uses: actions/upload-artifact@v4
@@ -34,3 +49,5 @@ jobs:
           name: IslandHLS-deb
           path: packages/*.deb
           if-no-files-found: error
+
+        
